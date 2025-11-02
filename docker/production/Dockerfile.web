@@ -1,0 +1,32 @@
+FROM python:3.11-slim
+
+LABEL maintainer="Djangogram Team"
+LABEL service="web"
+LABEL environment="production"
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    DEBIAN_FRONTEND=noninteractive \
+    PATH="/usr/local/bin:$PATH"
+
+WORKDIR /app
+
+COPY requirements.txt .
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential libpq-dev gcc curl && \
+    pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt && \
+    apt-get purge -y --auto-remove build-essential libpq-dev gcc && \
+    rm -rf /var/lib/apt/lists/* /root/.cache
+
+COPY . .
+
+RUN mkdir -p /app/staticfiles /app/media /app/logs
+
+RUN useradd -m -u 1000 djangouser && chown -R djangouser:djangouser /app
+USER djangouser
+
+EXPOSE 8000
+CMD ["uvicorn", "src.asgi:application", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]

@@ -1,0 +1,159 @@
+services:
+  db:
+    image: postgres:17.5
+    container_name: djangogram-db
+    environment:
+      POSTGRES_DB: ${DB_NAME:-djangogram_db}
+      POSTGRES_USER: ${DB_USER:-djangogram_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-djangogram_password}
+      TZ: Asia/Tashkent
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-djangogram_user} -d ${DB_NAME:-djangogram_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - djangogram_network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: djangogram-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - djangogram_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  web:
+    build:
+      context: ../../
+      dockerfile: docker/production/Dockerfile.web
+    container_name: djangogram-web
+    command: docker/production/commands/web.sh
+    volumes:
+      - ../../:/app
+      - static_data:/app/staticfiles
+      - media_data:/app/media
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - djangogram_network
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:latest
+    container_name: djangogram-nginx
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - static_data:/static
+      - media_data:/media
+    depends_on:
+      - web
+    networks:
+      - djangogram_network
+    restart: unless-stopped
+
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: djangogram_ngrok
+    command: ["http", "djangogram-nginx:80"]
+    env_file:
+      - .env
+    environment:
+      NGROK_DEBUG: "true"
+    depends_on:
+      - nginx
+    networks:
+      - djangogram_network
+    ports:
+      - "4040:4040"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:4040/api/tunnels | grep -q 'https'"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  celery_worker:
+    build:
+      context: ../../
+      dockerfile: docker/production/Dockerfile.bot
+    container_name: djangogram-celery-worker
+    command: docker/production/commands/worker.sh
+    volumes:
+      - ../../:/app
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - djangogram_network
+    restart: unless-stopped
+
+  celery_beat:
+    build:
+      context: ../../
+      dockerfile: docker/production/Dockerfile.bot
+    container_name: djangogram-celery-beat
+    command: docker/production/commands/beat.sh
+    volumes:
+      - ../../:/app
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      celery_worker:
+        condition: service_started
+    networks:
+      - djangogram_network
+    restart: unless-stopped
+
+  bot:
+    build:
+      context: ../../
+      dockerfile: docker/production/Dockerfile.bot
+    container_name: djangogram-bot
+    command: docker/production/commands/bot.sh
+    volumes:
+      - ../../:/app
+    env_file:
+      - .env
+    depends_on:
+      - web
+      - nginx
+      - ngrok
+    networks:
+      - djangogram_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  static_data:
+  media_data:
+
+networks:
+  djangogram_network:
+    driver: bridge

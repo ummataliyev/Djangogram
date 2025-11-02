@@ -1,0 +1,30 @@
+FROM python:3.11-slim
+
+LABEL maintainer="Djangogram Team"
+LABEL service="web"
+LABEL stage="development"
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    DEBIAN_FRONTEND=noninteractive
+
+WORKDIR /app
+
+COPY requirements.txt .
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential libpq-dev gcc && \
+    pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt && \
+    apt-get purge -y --auto-remove build-essential libpq-dev gcc && \
+    rm -rf /var/lib/apt/lists/* /root/.cache
+
+COPY . .
+
+RUN mkdir -p /app/staticfiles /app/media /app/logs
+
+
+EXPOSE 8000
+
+CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]

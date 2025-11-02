@@ -1,0 +1,132 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:17.5
+    container_name: djangogram-db
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${DB_NAME:-djangogram_db}
+      POSTGRES_USER: ${DB_USER:-djangogram_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-djangogram_password}
+      TZ: Asia/Tashkent
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-djangogram_user} -d ${DB_NAME:-djangogram_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - djangogram_network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: djangogram-redis
+    command: redis-server
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - djangogram_network
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ../../
+      dockerfile: docker/development/Dockerfile.web
+    container_name: djangogram-web
+    command: docker/development/commands/web.sh
+    volumes:
+      - ../../:/app
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - djangogram_network
+    restart: unless-stopped
+
+  bot:
+    build:
+      context: ../../
+      dockerfile: docker/development/Dockerfile.bot
+    container_name: djangogram-bot
+    command: docker/development/commands/bot.sh
+    volumes:
+      - ../../:/app
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - djangogram_network
+    restart: unless-stopped
+
+  celery_worker:
+    build:
+      context: ../../
+      dockerfile: docker/development/Dockerfile.bot
+    container_name: djangogram-celery-worker
+    command: docker/development/commands/worker.sh
+    volumes:
+      - ../../:/app
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - djangogram_network
+    restart: unless-stopped
+
+  celery_beat:
+    build:
+      context: ../../
+      dockerfile: docker/development/Dockerfile.bot
+    container_name: djangogram-celery-beat
+    command: docker/development/commands/beat.sh
+    volumes:
+      - ../../:/app
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      celery_worker:
+        condition: service_started
+    networks:
+      - djangogram_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  djangogram_network:
+    driver: bridge
