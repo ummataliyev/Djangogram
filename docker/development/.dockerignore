@@ -39,11 +39,6 @@ yarn-error.log*
 package-lock.json
 pnpm-lock.yaml
 
-# Git & version control
-.git/
-.gitmodules
-.gitconfig
-
 # Tests & coverage
 htmlcov/
 .tox/

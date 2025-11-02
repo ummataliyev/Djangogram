@@ -1,21 +1,95 @@
+# Python cache & compiled files
 __pycache__/
 *.py[cod]
 *$py.class
+*.pyo
+*.pyd
+*.so
 
+# Virtual environments
 venv/
-.env
-.env.*
+.venv/
+env/
+ENV/
+env.bak/
+envs/
 *.env
+*.env.*
 
-media/
-staticfiles/
+# Logs & runtime files
+*.log
 logs/
+tmp/
+cache/
+*.pid
+*.sock
+*.db
+*.sqlite3
 
-.git/
+# Django static/media files (usually mounted as volumes)
+media/
+static/
+staticfiles/
 
+# Node modules (if you use frontend build tools)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+pnpm-lock.yaml
+
+# Tests & coverage
+htmlcov/
+.tox/
+.nox/
+.coverage
+coverage.xml
+.pytest_cache/
+.mypy_cache/
+.cache/
+
+# Docker internal
+Dockerfile*
+docker-compose*.yml
+docker/
+docker/production/commands/*.sh
+docker/development/commands/*.sh
+!docker/production/Dockerfile.web
+!docker/production/Dockerfile.bot
+
+# System files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Icon?
+Desktop.ini
+
+# IDE / Editor settings
 .vscode/
 .idea/
-*.swp
+*.sublime-project
+*.sublime-workspace
 
-docker/__pycache__/
-docker/production/.env
+# Build artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+*.tar.gz
+*.whl
+
+*.bak
+*.old
+*.swp
+*.tmp
+
+# Exceptions — keep important files for the container
+!manage.py
+!requirements*.txt
+!pyproject.toml
+!poetry.lock
+!setup.py
+!docker/production/
+!docker/development/
+!apps/
