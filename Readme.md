@@ -1,6 +1,5 @@
-# Djangogram – Production-Ready Django + Aiogram Telegram Bot
+# Djangogram ⚡️ 
 ## Production-Ready Django + Aiogram Telegram Bot
-
 
 A production-ready **Django + Aiogram Telegram bot** boilerplate supporting both **polling** and **webhook** modes.  
 Includes **Nginx reverse proxy**, **Ngrok integration**, **structured logging**, **async PostgreSQL operations**, **Celery tasks**, and **modular handler architecture**.
