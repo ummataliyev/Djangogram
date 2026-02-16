@@ -8,7 +8,9 @@ Django + Aiogram Telegram bot template with Docker, Celery, and production webho
 - Webhook mode for production
 - Webhook request authentication via `X-Telegram-Bot-Api-Secret-Token`
 - Django + Celery + Redis + PostgreSQL
-- Nginx reverse proxy for production
+- Fixed Docker Compose project name: `djangogram` (development and production)
+- Optimized production Nginx with gzip, JSON logs, security headers, and websocket proxy support
+- Bot startup broadcast to saved users: `Hi, Bot is Running!`
 - CI checks (lint, migrations, Django checks, tests)
 
 ## Quick Start
@@ -37,6 +39,11 @@ make help
 make dev-up
 ```
 
+5. Start production stack:
+```bash
+make prod-up
+```
+
 ## Important Production Variables
 
 - `DEBUG=False`
@@ -53,6 +60,12 @@ If you want webhook mode locally, set:
 - `USE_NGROK=True`
 
 and provide a running ngrok endpoint in your environment.
+
+## Runtime Notes
+
+- The Compose project is always named `djangogram`, so Docker Desktop shows `djangogram` for both environments.
+- Startup broadcast is sent only to Telegram users already saved in the `users` table.
+- When running tests with `DEBUG=False`, webhook tests must use HTTPS requests (the suite already does this).
 
 ## Quality Checks
 
