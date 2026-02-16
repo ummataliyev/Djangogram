@@ -1,3 +1,5 @@
+name: djangogram
+
 services:
   db:
     image: postgres:17.5
@@ -42,7 +44,6 @@ services:
     container_name: djangogram-web
     command: docker/production/commands/web.sh
     volumes:
-      - ../../:/app
       - static_data:/app/staticfiles
       - media_data:/app/media
     env_file:
@@ -60,35 +61,16 @@ services:
     image: nginx:latest
     container_name: djangogram-nginx
     volumes:
-      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - static_data:/static
       - media_data:/media
     depends_on:
       - web
-    networks:
-      - djangogram_network
-    restart: unless-stopped
-
-  ngrok:
-    image: ngrok/ngrok:latest
-    container_name: djangogram_ngrok
-    command: ["http", "djangogram-nginx:80"]
-    env_file:
-      - .env
-    environment:
-      NGROK_DEBUG: "true"
-    depends_on:
-      - nginx
-    networks:
-      - djangogram_network
     ports:
-      - "4040:4040"
+      - "80:80"
+    networks:
+      - djangogram_network
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "curl -s http://localhost:4040/api/tunnels | grep -q 'https'"]
-      interval: 5s
-      timeout: 5s
-      retries: 15
 
   celery_worker:
     build:
@@ -96,8 +78,6 @@ services:
       dockerfile: docker/production/Dockerfile.bot
     container_name: djangogram-celery-worker
     command: docker/production/commands/worker.sh
-    volumes:
-      - ../../:/app
     env_file:
       - .env
     depends_on:
@@ -115,8 +95,6 @@ services:
       dockerfile: docker/production/Dockerfile.bot
     container_name: djangogram-celery-beat
     command: docker/production/commands/beat.sh
-    volumes:
-      - ../../:/app
     env_file:
       - .env
     depends_on:
@@ -136,14 +114,11 @@ services:
       dockerfile: docker/production/Dockerfile.bot
     container_name: djangogram-bot
     command: docker/production/commands/bot.sh
-    volumes:
-      - ../../:/app
     env_file:
       - .env
     depends_on:
       - web
       - nginx
-      - ngrok
     networks:
       - djangogram_network
     restart: unless-stopped

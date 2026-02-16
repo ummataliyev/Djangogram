@@ -22,6 +22,7 @@ async def get_ngrok_url(max_retries: int = 20, delay: int = 3) -> str:
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get("http://ngrok:4040/api/tunnels") as resp:
+                    resp.raise_for_status()
                     data = await resp.json()
                     for tunnel in data.get("tunnels", []):
                         if tunnel.get("proto") == "https":
@@ -32,8 +33,13 @@ async def get_ngrok_url(max_retries: int = 20, delay: int = 3) -> str:
                             logger.info(f"🌍 NGROK_DOMAIN set to: {domain}")
 
                             return url
-        except Exception:
-            logger.warning(f"⏳ Ngrok not ready yet ({attempt + 1}/{max_retries})...")
+        except Exception as exc:
+            logger.warning(
+                "⏳ Ngrok not ready yet (%s/%s): %s",
+                attempt + 1,
+                max_retries,
+                exc,
+            )
             await asyncio.sleep(delay)
 
     raise RuntimeError("Failed to obtain Ngrok URL — no tunnel found.")

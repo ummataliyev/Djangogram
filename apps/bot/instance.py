@@ -1,158 +1,180 @@
 import asyncio
+from urllib.parse import urlparse
 
-from typing import Optional
-
-from aiogram import Bot
-from aiogram import Router
-from aiogram import Dispatcher
-
-from aiogram.exceptions import TelegramRetryAfter
-from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram import Bot, Dispatcher
 from aiogram.client.session.aiohttp import AiohttpSession
+from aiogram.exceptions import TelegramRetryAfter
+from asgiref.sync import sync_to_async
+from aiogram.fsm.storage.base import BaseStorage
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.fsm.storage.redis import RedisStorage
 
-from apps.bot.utils.logging import logger
 from apps.bot.handlers import register_all
+from apps.bot.models.users import Users
+from apps.bot.utils.logging import logger
 from apps.bot.utils.ngrok import get_ngrok_url
-
 from src.settings.config.configs import config
+
+
+def build_storage() -> BaseStorage:
+    if not config.REDIS_URL:
+        logger.warning("REDIS_URL is empty. Falling back to in-memory FSM storage.")
+        return MemoryStorage()
+
+    try:
+        return RedisStorage.from_url(config.REDIS_URL)
+    except Exception as exc:
+        logger.warning(
+            "Failed to initialize RedisStorage (%s). Falling back to MemoryStorage.",
+            exc,
+        )
+        return MemoryStorage()
+
+
+async def resolve_webhook_base_url() -> str:
+    if config.WEBHOOK_BASE_URL:
+        parsed = urlparse(config.WEBHOOK_BASE_URL)
+        if parsed.scheme != "https":
+            raise ValueError("WEBHOOK_BASE_URL must start with https://")
+        return config.WEBHOOK_BASE_URL.rstrip("/")
+
+    if config.USE_NGROK:
+        logger.info("Waiting for ngrok to provide a public URL...")
+        return (await get_ngrok_url()).rstrip("/")
+
+    raise RuntimeError(
+        "Webhook mode requires WEBHOOK_BASE_URL or USE_NGROK=True."
+    )
 
 
 session = AiohttpSession()
 bot = Bot(config.BOT_TOKEN, session=session)
-dp = Dispatcher(storage=MemoryStorage())
-
-router: Optional[Router] = None
+dp = Dispatcher(storage=build_storage())
 
 register_all(dp)
-logger.info("✅ All routers registered")
+logger.info("All routers registered")
 
 
-def init_router(actual_router: Router) -> None:
-    """
-    Initialize and include a given router into the dispatcher.
+@sync_to_async
+def _fetch_startup_chat_ids() -> list[int]:
+    return list(Users.objects.exclude(chat_id__isnull=True).values_list("chat_id", flat=True))
 
-    :param actual_router: The router instance to include into the dispatcher.
-    :type actual_router: aiogram.Router
-    :return: None
-    :rtype: NoneType
-    """
-    global router
-    if router is None:
-        dp.include_router(actual_router)
-        router = actual_router
-        logger.info("✅ Router successfully included")
+
+async def notify_bot_started() -> None:
+    startup_text = "Hi, Bot is Running!"
+    try:
+        chat_ids = await _fetch_startup_chat_ids()
+    except Exception:
+        logger.exception("Failed to fetch startup notification recipients.")
+        return
+
+    if not chat_ids:
+        logger.info("No Telegram users found for startup notification.")
+        return
+
+    sent = 0
+    failed = 0
+    for chat_id in chat_ids:
+        try:
+            await bot.send_message(chat_id=chat_id, text=startup_text)
+            sent += 1
+        except TelegramRetryAfter as exc:
+            wait_time = getattr(exc, "retry_after", 1)
+            logger.warning(
+                "Rate limited while sending startup notification to chat_id=%s; retrying in %ss.",
+                chat_id,
+                wait_time,
+            )
+            await asyncio.sleep(wait_time)
+            try:
+                await bot.send_message(chat_id=chat_id, text=startup_text)
+                sent += 1
+            except Exception:
+                failed += 1
+                logger.exception(
+                    "Failed to send startup notification after retry to chat_id=%s.",
+                    chat_id,
+                )
+        except Exception:
+            failed += 1
+            logger.exception("Failed to send startup notification to chat_id=%s.", chat_id)
+
+    logger.info("Startup notification completed. sent=%s failed=%s", sent, failed)
 
 
 async def on_startup() -> None:
-    """
-    Perform bot startup routines.
-
-    This function initializes the bot depending on the selected mode:
-    - **Polling mode:** Skips webhook setup (used for local development).
-    - **Webhook mode:** Waits for Ngrok to start, retrieves the public URL,
-      and registers it with Telegram as the bot's webhook endpoint.
-
-    :raises Exception: If webhook setup fails after maximum retry attempts.
-    :return: None
-    :rtype: NoneType
-    """
     if config.IS_POLLING:
-        logger.info("🚀 Polling mode active — skipping webhook setup")
+        logger.info("Polling mode active: webhook setup skipped.")
+        await notify_bot_started()
         return
 
     max_retries = 3
-    retry_count = 0
-
-    while retry_count < max_retries:
+    for attempt in range(1, max_retries + 1):
         try:
-            logger.info("⏳ Waiting for ngrok to start...")
-            ngrok_url = await get_ngrok_url()
-            webhook_url = f"{ngrok_url}/bot/webhook/"
-            logger.info(f"🌐 Ngrok URL: {ngrok_url}")
-            logger.info(f"📍 Webhook URL: {webhook_url}")
+            webhook_base_url = await resolve_webhook_base_url()
+            webhook_url = f"{webhook_base_url}/bot/webhook/"
+            logger.info("Webhook URL resolved: %s", webhook_url)
 
             await bot.delete_webhook(drop_pending_updates=True)
-            logger.info("🗑️ Old webhook deleted")
 
-            webhook_set = await bot.set_webhook(
-                url=webhook_url,
-                allowed_updates=dp.resolve_used_update_types(),
-                drop_pending_updates=True
-            )
+            set_webhook_payload = {
+                "url": webhook_url,
+                "allowed_updates": dp.resolve_used_update_types(),
+                "drop_pending_updates": True,
+            }
+            if config.TELEGRAM_WEBHOOK_SECRET:
+                set_webhook_payload["secret_token"] = config.TELEGRAM_WEBHOOK_SECRET
 
-            if webhook_set:
-                logger.info("✅ Webhook successfully set!")
+            webhook_set = await bot.set_webhook(**set_webhook_payload)
+            if not webhook_set:
+                raise RuntimeError("Telegram set_webhook returned False.")
 
-                webhook_info = await bot.get_webhook_info()
-                logger.info("📊 Webhook info:")
-                logger.info(f" - URL: {webhook_info.url}")
-                logger.info(f" - Has custom certificate: {webhook_info.has_custom_certificate}")
-                logger.info(f" - Pending update count: {webhook_info.pending_update_count}")
-                if webhook_info.last_error_date:
-                    logger.warning(f" - Last error: {webhook_info.last_error_message}")
-                return  # Success — exit retry loop
-            else:
-                raise ValueError("set_webhook returned False")
-
-        except TelegramRetryAfter as e:
-            retry_count += 1
-            wait_time = getattr(e, "retry_after", 1)
+            webhook_info = await bot.get_webhook_info()
+            logger.info("Webhook active: %s", webhook_info.url)
+            await notify_bot_started()
+            return
+        except TelegramRetryAfter as exc:
+            wait_time = getattr(exc, "retry_after", 1)
             logger.warning(
-                f"⚠️ Rate limit hit on set_webhook (retry {retry_count}/{max_retries}). "
-                f"Waiting {wait_time}s..."
+                "Telegram rate limit on set_webhook (attempt %s/%s). Waiting %ss.",
+                attempt,
+                max_retries,
+                wait_time,
             )
             await asyncio.sleep(wait_time)
-
-        except Exception as e:
-            logger.error(f"❌ Failed to setup webhook: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Failed to configure webhook.")
             raise
 
-    raise Exception(f"Failed to set webhook after {max_retries} retries")
+    raise RuntimeError(f"Failed to configure webhook after {max_retries} retries.")
 
 
 async def on_shutdown() -> None:
-    """
-    Cleanly shut down the bot and close open sessions.
-
-    :return: None
-    :rtype: NoneType
-    """
     try:
         if not config.IS_POLLING:
             await bot.delete_webhook()
-            logger.info("🛑 Webhook deleted")
+            logger.info("Webhook deleted")
 
         await bot.session.close()
-        logger.info("🛑 Bot session closed")
-
-    except Exception as e:
-        logger.error(f"Error during shutdown: {e}")
+        logger.info("Bot session closed")
+    except Exception:
+        logger.exception("Error during bot shutdown.")
 
 
 async def start_bot() -> None:
-    """
-    Start the bot in **polling mode**.
-
-    :return: None
-    :rtype: NoneType
-    """
     if not config.IS_POLLING:
-        logger.warning(
-            "⚠️ start_bot() called but IS_POLLING=False. "
-            "Use webhook mode in production."
-        )
+        logger.warning("start_bot() called with IS_POLLING=False; skipping.")
         return
 
     try:
         await on_startup()
-        logger.info("🤖 Starting polling...")
+        logger.info("Starting polling loop...")
         await dp.start_polling(bot, polling_timeout=20, handle_signals=True)
-
     except asyncio.CancelledError:
-        logger.info("⚠️ Polling cancelled")
+        logger.info("Polling cancelled")
     except KeyboardInterrupt:
-        logger.info("⚠️ Keyboard interrupt received")
-    except Exception as e:
-        logger.error(f"❌ Error in start_bot: {e}", exc_info=True)
+        logger.info("Keyboard interrupt received")
+    except Exception:
+        logger.exception("Error while running polling mode.")
     finally:
         await on_shutdown()

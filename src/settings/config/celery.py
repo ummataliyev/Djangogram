@@ -21,4 +21,4 @@ app.conf.beat_schedule = {
 }
 
 
-app.conf.timezone = "Asia/Tashkent"
+app.conf.timezone = config.CELERY_TIMEZONE
