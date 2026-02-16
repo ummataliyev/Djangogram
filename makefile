@@ -1,5 +1,6 @@
 DEV_COMPOSE = docker compose -f docker/development/docker-compose.yml
 PROD_COMPOSE = docker compose -f docker/production/docker-compose.yml
+SELF_MAKEFILE = $(firstword $(MAKEFILE_LIST))
 
 define run_compose
 $(1) $(2)
@@ -161,14 +162,14 @@ help:
 	@echo "Available commands:"
 	@echo ""
 	@echo "Development commands:"
-	@grep -E '^[a-zA-Z0-9_-]+:' Makefile | grep '^dev-' | while read cmd _; do \
-		desc=$$(grep -A1 "$$cmd" Makefile | tail -n1 | sed 's/^[ \t]*# //'); \
+	@grep -E '^[a-zA-Z0-9_-]+:' $(SELF_MAKEFILE) | grep '^dev-' | while read cmd _; do \
+		desc=$$(grep -A1 "$$cmd" $(SELF_MAKEFILE) | tail -n1 | sed 's/^[ \t]*# //'); \
 		printf "  %-25s %s\n" "$$cmd" "$$desc"; \
 	done
 	@echo ""
 	@echo "Production commands:"
-	@grep -E '^[a-zA-Z0-9_-]+:' Makefile | grep '^prod-' | while read cmd _; do \
-		desc=$$(grep -A1 "$$cmd" Makefile | tail -n1 | sed 's/^[ \t]*# //'); \
+	@grep -E '^[a-zA-Z0-9_-]+:' $(SELF_MAKEFILE) | grep '^prod-' | while read cmd _; do \
+		desc=$$(grep -A1 "$$cmd" $(SELF_MAKEFILE) | tail -n1 | sed 's/^[ \t]*# //'); \
 		printf "  %-25s %s\n" "$$cmd" "$$desc"; \
 	done
 

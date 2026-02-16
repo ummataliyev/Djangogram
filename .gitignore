@@ -1,0 +1,87 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+*.so
+
+venv/
+env/
+.venv/
+.env/
+ENV/
+*.env
+*.env.*
+
+# Django
+*.log
+*.pot
+*.pyc
+*.sqlite3
+db.sqlite3
+media/
+staticfiles/
+static/
+node_modules/
+.mypy_cache/
+pytest_cache/
+.coverage
+htmlcov/
+.DS_Store
+
+settings_local.py
+local_settings.py
+
+**/migrations/__pycache__/
+
+# Aiogram
+*.session
+*.session-journal
+bot_data/
+logs/
+cache/
+tmp/
+
+# Docker
+docker/*.env
+docker/development/*.env
+docker/production/*.env
+docker/volumes/
+docker-compose.override.yml
+*.pid
+*.sock
+
+# Ignore build artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# VSCode
+.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# PyCharm / JetBrains
+.idea/
+.idea/*
+!.idea/codeStyles/
+
+# Sublime
+*.sublime-project
+*.sublime-workspace
+
+# System files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Icon?
+Desktop.ini
+
+# GIT / CI RELATED
+.gitmodules
+.gitconfig
+.envrc
+.env.bak
