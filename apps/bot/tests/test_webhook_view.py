@@ -14,6 +14,7 @@ class TelegramWebhookViewTests(TestCase):
                 "/bot/webhook/",
                 data=json.dumps({"update_id": 1}),
                 content_type="application/json",
+                secure=True,
             )
 
         self.assertEqual(response.status_code, 403)
@@ -28,6 +29,7 @@ class TelegramWebhookViewTests(TestCase):
                 data=json.dumps({"update_id": 1}),
                 content_type="application/json",
                 HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN="wrong-secret",
+                secure=True,
             )
 
         self.assertEqual(response.status_code, 403)
@@ -38,6 +40,7 @@ class TelegramWebhookViewTests(TestCase):
                 "/bot/webhook/",
                 data="{not-json",
                 content_type="application/json",
+                secure=True,
             )
 
         self.assertEqual(response.status_code, 400)
@@ -58,6 +61,7 @@ class TelegramWebhookViewTests(TestCase):
                 data=json.dumps({"update_id": 1}),
                 content_type="application/json",
                 HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN="expected-secret",
+                secure=True,
             )
 
         self.assertEqual(response.status_code, 200)
