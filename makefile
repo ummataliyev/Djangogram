@@ -1,5 +1,5 @@
-DEV_COMPOSE = docker compose -f docker/development/docker-compose.yml
-PROD_COMPOSE = docker compose -f docker/production/docker-compose.yml
+DEV_COMPOSE = docker compose -f infra/development/docker-compose.yml
+PROD_COMPOSE = docker compose -f infra/production/docker-compose.yml
 SELF_MAKEFILE = $(firstword $(MAKEFILE_LIST))
 
 define run_compose

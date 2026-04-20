@@ -4,6 +4,8 @@ services:
   db:
     image: postgres:17.5
     container_name: djangogram-db
+    env_file:
+      - .env
     environment:
       POSTGRES_DB: ${DB_NAME:-djangogram_db}
       POSTGRES_USER: ${DB_USER:-djangogram_user}
@@ -25,27 +27,30 @@ services:
   redis:
     image: redis:7-alpine
     container_name: djangogram-redis
-    command: redis-server --appendonly yes
+    command: redis-server
     volumes:
       - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
     networks:
       - djangogram_network
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
 
   web:
     build:
       context: ../../
-      dockerfile: docker/production/Dockerfile.web
+      dockerfile: infra/development/Dockerfile.web
     container_name: djangogram-web
-    command: docker/production/commands/web.sh
+    command: infra/development/commands/web.sh
     volumes:
-      - static_data:/app/staticfiles
-      - media_data:/app/media
+      - ../../:/app
+    ports:
+      - "8000:8000"
     env_file:
       - .env
     depends_on:
@@ -57,17 +62,21 @@ services:
       - djangogram_network
     restart: unless-stopped
 
-  nginx:
-    image: nginx:latest
-    container_name: djangogram-nginx
+  bot:
+    build:
+      context: ../../
+      dockerfile: infra/development/Dockerfile.bot
+    container_name: djangogram-bot
+    command: infra/development/commands/bot.sh
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - static_data:/static
-      - media_data:/media
+      - ../../:/app
+    env_file:
+      - .env
     depends_on:
-      - web
-    ports:
-      - "80:80"
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - djangogram_network
     restart: unless-stopped
@@ -75,9 +84,11 @@ services:
   celery_worker:
     build:
       context: ../../
-      dockerfile: docker/production/Dockerfile.bot
+      dockerfile: infra/development/Dockerfile.bot
     container_name: djangogram-celery-worker
-    command: docker/production/commands/worker.sh
+    command: infra/development/commands/worker.sh
+    volumes:
+      - ../../:/app
     env_file:
       - .env
     depends_on:
@@ -92,9 +103,11 @@ services:
   celery_beat:
     build:
       context: ../../
-      dockerfile: docker/production/Dockerfile.bot
+      dockerfile: infra/development/Dockerfile.bot
     container_name: djangogram-celery-beat
-    command: docker/production/commands/beat.sh
+    command: infra/development/commands/beat.sh
+    volumes:
+      - ../../:/app
     env_file:
       - .env
     depends_on:
@@ -108,26 +121,11 @@ services:
       - djangogram_network
     restart: unless-stopped
 
-  bot:
-    build:
-      context: ../../
-      dockerfile: docker/production/Dockerfile.bot
-    container_name: djangogram-bot
-    command: docker/production/commands/bot.sh
-    env_file:
-      - .env
-    depends_on:
-      - web
-      - nginx
-    networks:
-      - djangogram_network
-    restart: unless-stopped
-
 volumes:
   postgres_data:
+    driver: local
   redis_data:
-  static_data:
-  media_data:
+    driver: local
 
 networks:
   djangogram_network:

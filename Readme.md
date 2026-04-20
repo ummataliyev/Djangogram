@@ -41,11 +41,11 @@ cd djangogram
 
 2. Create env files:
 ```bash
-cp docker/development/.env-example docker/development/.env
-cp docker/production/.env-example docker/production/.env
+cp infra/development/.env-example infra/development/.env
+cp infra/production/.env-example infra/production/.env
 ```
 
-3. Edit `docker/development/.env`:
+3. Edit `infra/development/.env`:
 - Set `BOT_TOKEN`
 - Set a strong `SECRET_KEY`
 - Keep `IS_POLLING=True` for local development
@@ -97,7 +97,7 @@ make prod-logs
 
 ## Webhook Mode (Production)
 
-Set these in `docker/production/.env`:
+Set these in `infra/production/.env`:
 
 - `DEBUG=False`
 - `ALLOWED_HOSTS=your-domain.com`
@@ -123,7 +123,7 @@ If you want webhook mode locally:
 
 Run inside Docker (recommended):
 ```bash
-docker compose -f docker/development/docker-compose.yml run --rm web python manage.py test
+docker compose -f infra/development/docker-compose.yml run --rm web python manage.py test
 ```
 
 Run local checks:
